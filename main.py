@@ -147,19 +147,23 @@ def ensure_excel_file(file_path):
         wb = load_workbook(file_path, keep_vba=True)
         ws = wb.active
 
-        # '최대중복' 열이 없는 경우 새로 추가
+        # 기존에 F1까지 사용하던 헤더를 새로운 형식으로 변경
         if ws.max_column < 6:
-            ws["F1"] = "최대중복"
+            ws["A1"] = "바코드"
+            ws["B1"] = "날짜"
+            ws["C1"] = "횟수"
+            ws["D1"] = "비고"
+            ws["E1"] = "최대중복"
             wb.save(file_path)
         wb.close()
     except FileNotFoundError:
         wb = Workbook()
         ws = wb.active
         ws["A1"] = "바코드"
-        ws["C1"] = "날짜/시간"
-        ws["D1"] = "중복횟수"
-        ws["E1"] = "상태"
-        ws["F1"] = "최대중복"
+        ws["B1"] = "날짜"
+        ws["C1"] = "횟수"
+        ws["D1"] = "비고"
+        ws["E1"] = "최대중복"
         wb.save(file_path)
 
 def show_max_duplicate_popup(app_window, barcode, max_duplicate):
@@ -167,7 +171,7 @@ def show_max_duplicate_popup(app_window, barcode, max_duplicate):
     msg_box = QMessageBox(app_window)
     msg_box.setIcon(QMessageBox.Warning)
     msg_box.setWindowTitle("최대 중복 횟수 초과")
-    msg_box.setText(f"바코드 {barcode}의 최대 중복 횟수 ({max_duplicate}회)를 초과했습니다.\n더 이상 등록할 수 없습니다.")
+    msg_box.setText(f"바코드 {barcode}의 최대 중복 횟수 ({max_duplicate})를 초과했습니다.\n더 이상 등록할 수 없습니다.")
     msg_box.setStandardButtons(QMessageBox.Ok)
     msg_box.exec()
 
@@ -180,51 +184,52 @@ def process_barcode(barcode, file_path, app_window):
     existing_barcodes = [ws.cell(row=row, column=1).value for row in range(2, ws.max_row + 1)]
     barcode_exists = barcode in existing_barcodes
 
-    # 새로운 바코드라면 최대 중복 횟수 입력받기
+    # 현재 시각 (날짜 컬럼에 들어갈 값)
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+
     if not barcode_exists:
         max_duplicate = app_window.prompt_max_duplicate()
         if max_duplicate is None:
             wb.close()
             return "등록이 취소되었습니다."
 
-        # 데이터 추가
+        # 신규 바코드 첫 번째 등록
         new_row = ws.max_row + 1
         ws.cell(row=new_row, column=1, value=barcode)
-        ws.cell(row=new_row, column=3, value=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        ws.cell(row=new_row, column=4, value=1)  # 중복횟수
-        ws.cell(row=new_row, column=5, value="진행 중")  # 상태
-        ws.cell(row=new_row, column=6, value=max_duplicate)  # 최대 중복 횟수
+        ws.cell(row=new_row, column=2, value=now_str)  # 날짜
+        ws.cell(row=new_row, column=3, value="1 회")  # 횟수
+        ws.cell(row=new_row, column=4, value="신규 등록")  # 비고
+        ws.cell(row=new_row, column=5, value=f"{max_duplicate}회")  # 최대중복
 
         # ✅ 입력창 초기화
         app_window.input_line.clear()
         app_window.input_line.setFocus()
-
     else:
         # 이미 존재하는 경우 중복 횟수 업데이트
         max_row = ws.max_row + 1
         count = sum(1 for row in range(2, max_row) if ws.cell(row=row, column=1).value == barcode)
         max_duplicate = next(
-            (ws.cell(row=row, column=6).value for row in range(2, max_row) if ws.cell(row=row, column=1).value == barcode),
-            1
+            (ws.cell(row=row, column=5).value for row in range(2, max_row) if ws.cell(row=row, column=1).value == barcode),
+            "1회"
         )
 
         # 최대 중복 횟수 초과 시 등록 차단
-        if count >= max_duplicate:
+        if count >= int(max_duplicate.replace("회", "")):
             wb.close()
             show_max_duplicate_popup(app_window, barcode, max_duplicate)
             app_window.input_line.clear()
             app_window.input_line.setFocus()
-            return f"등록 불가: 바코드 {barcode}의 최대 중복 횟수({max_duplicate}회)를 초과했습니다."
+            return f"등록 불가: 바코드 {barcode}의 최대 중복 횟수({max_duplicate})를 초과했습니다."
 
         # 상태 업데이트
-        state = f"{max_duplicate}회 완료" if count + 1 >= max_duplicate else "진행 중"
+        state = "최대 한도 도달" if count + 1 >= int(max_duplicate.replace("회", "")) else "중복 사용"
 
         # 데이터 추가
         ws.cell(row=max_row, column=1, value=barcode)
-        ws.cell(row=max_row, column=3, value=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        ws.cell(row=max_row, column=4, value=count + 1)
-        ws.cell(row=max_row, column=5, value=state)
-        ws.cell(row=max_row, column=6, value=max_duplicate)
+        ws.cell(row=max_row, column=2, value=now_str)  # 날짜
+        ws.cell(row=max_row, column=3, value=f"{count + 1} 회")  # 횟수
+        ws.cell(row=max_row, column=4, value=state)  # 비고
+        ws.cell(row=max_row, column=5, value=max_duplicate)  # 최대중복
 
     wb.save(file_path)
     wb.close()
@@ -245,9 +250,10 @@ def get_recent_items(file_path, limit=10):
 
     for row in range(max(max_row - limit + 1, 2), max_row + 1):  # 마지막 `limit`개만 가져옴
         barcode = ws.cell(row=row, column=1).value
-        timestamp = ws.cell(row=row, column=3).value
-        duplicate_count = ws.cell(row=row, column=4).value
-        recent_items.append(f"{barcode} | {timestamp} | {duplicate_count}")
+        timestamp = ws.cell(row=row, column=2).value
+        duplicate_count = ws.cell(row=row, column=3).value
+        max_count = ws.cell(row=row, column=4).value
+        recent_items.append(f"{barcode} \t {timestamp} \t {duplicate_count} \t {max_count}")
 
     wb.close()
     return "\n".join(recent_items)
