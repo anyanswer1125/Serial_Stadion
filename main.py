@@ -241,19 +241,32 @@ def process_barcode(barcode, file_path, app_window):
     return f"바코드 {barcode} 처리 완료 (중복: {count + 1}/{max_duplicate})"
 
 def get_recent_items(file_path, limit=10):
-    """최근 항목 가져오기"""
+    """최근 항목 가져오기 (일정한 간격 유지)"""
     wb = load_workbook(file_path, keep_vba=True)
     ws = wb.active
 
     max_row = ws.max_row
     recent_items = []
 
+    # 칼럼 
+    # 너비 설정 (문자열 길이를 균일하게 유지)
+    COL_WIDTH = {
+        "barcode": 22,   # 바코드 길이 고정
+        "timestamp": 18, # YYYY-MM-DD HH:MM
+        "count": 12,      # "99 회"
+        "status": 20,    # "최대 사용 횟수 도달"
+        "max_count": 6   # "99회"
+    }
+
     for row in range(max(max_row - limit + 1, 2), max_row + 1):  # 마지막 `limit`개만 가져옴
-        barcode = ws.cell(row=row, column=1).value
-        timestamp = ws.cell(row=row, column=2).value
-        duplicate_count = ws.cell(row=row, column=3).value
-        max_count = ws.cell(row=row, column=4).value
-        recent_items.append(f"{barcode} \t {timestamp} \t {duplicate_count} \t {max_count}")
+        barcode = str(ws.cell(row=row, column=1).value).ljust(COL_WIDTH["barcode"])  # 왼쪽 정렬
+        timestamp = str(ws.cell(row=row, column=2).value).rjust(COL_WIDTH["timestamp"])
+        duplicate_count = str(ws.cell(row=row, column=3).value).rjust(COL_WIDTH["count"])  # 오른쪽 정렬
+        status = str(ws.cell(row=row, column=4).value).rjust(COL_WIDTH["status"])  # 왼쪽 정렬
+        max_count = str(ws.cell(row=row, column=5).value).rjust(COL_WIDTH["max_count"])  # 오른쪽 정렬
+
+        # recent_items.append(f"{barcode} {timestamp} {duplicate_count} {status} {max_count}") #백업
+        recent_items.append(f"   {barcode} {timestamp} {duplicate_count} {status}") 
 
     wb.close()
     return "\n".join(recent_items)
