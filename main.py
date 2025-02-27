@@ -5,6 +5,7 @@ from openpyxl import load_workbook, Workbook
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QLineEdit, QPushButton, QLabel, QTextEdit, QFileDialog, QWidget, QInputDialog
 )
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QTextEdit
 from PySide6.QtCore import QFileSystemWatcher
 from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QMessageBox
@@ -17,6 +18,13 @@ class BarcodeApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("할인쿠폰R0.2_preview")
+        
+        # 🔹 창 크기 설정 (너비 800px, 높이 600px)
+        self.resize(500, 600)
+
+        # 🔹 창 위치와 크기 설정 (x=100, y=100, width=800, height=600)
+        # self.setGeometry(100, 100, 800, 600)
+        
         self.current_file = DEFAULT_EXCEL_FILE  # 현재 데이터베이스 파일
         
         
@@ -61,8 +69,20 @@ class BarcodeApp(QMainWindow):
         self.input_line.setFocus()
         self.input_line.returnPressed.connect(self.on_process_clicked)
         
+        # 검색
+        # 생성자 (__init__)에서 추가
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("검색할 바코드를 입력하세요...")
+        self.layout.addWidget(self.search_input)
+        
+        self.search_button = QPushButton("검색")
+        self.search_button.clicked.connect(self.perform_search)
+        self.layout.addWidget(self.search_button)
+        
+        
         self.file_label = QLabel(f"불러온 파일: {os.path.basename(self.current_file)}")
         self.layout.addWidget(self.file_label)
+
 
 
     def create_menu_bar(self):
@@ -158,7 +178,59 @@ class BarcodeApp(QMainWindow):
         if event.type() == QEvent.ActivationChange and self.isActiveWindow():
             self.input_line.setFocus()
         super().changeEvent(event)
+        
 
+    def perform_search(self):
+        """입력된 바코드를 검색 후 팝업 창에서 표시"""
+        barcode = self.search_input.text().strip()
+        if not barcode:
+            self.result_label.setText("⚠ 바코드를 입력하세요.")
+            return
+
+        result = self.find_barcode_in_excel(barcode)
+
+        if result:
+            self.show_search_results(barcode, result)
+        else:
+            self.result_label.setText("🔍 검색 결과 없음.")
+
+    def find_barcode_in_excel(self, barcode):
+        """엑셀에서 바코드 검색"""
+        from openpyxl import load_workbook
+
+        wb = load_workbook(self.current_file, keep_vba=True)
+        ws = wb.active
+
+        results = []
+        for row in range(2, ws.max_row + 1):
+            code = str(ws.cell(row=row, column=1).value).strip()
+            if code == barcode:
+                date = ws.cell(row=row, column=2).value
+                count = ws.cell(row=row, column=3).value
+                remark = ws.cell(row=row, column=4).value
+                results.append(f"{date}\t{count}\t{remark}")
+
+        wb.close()
+        return results if results else None
+    def show_search_results(self, barcode, results):
+        """검색 결과를 새 창으로 표시"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"바코드 검색 결과 - {barcode}")
+        dialog.setGeometry(300, 200, 380, 400)
+
+        layout = QVBoxLayout()
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setText("\n".join(results))
+
+        layout.addWidget(text_edit)
+        dialog.setLayout(layout)
+        dialog.exec()
+
+
+    
 def ensure_excel_file(file_path):
     """데이터 관리를 위한 엑셀 파일 생성 확인"""
     try:
@@ -298,3 +370,5 @@ if __name__ == "__main__":
     window = BarcodeApp()
     window.show()
     sys.exit(app.exec())
+
+
