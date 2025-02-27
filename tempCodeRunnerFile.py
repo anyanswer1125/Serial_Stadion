@@ -16,7 +16,7 @@ QSS_FILE = "style.qss"  # QSS 파일 경로
 class BarcodeApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("할인쿠폰R0.2_preview")
+        self.setWindowTitle("바코드 처리 프로그램")
         self.current_file = DEFAULT_EXCEL_FILE  # 현재 데이터베이스 파일
         
         
@@ -60,9 +60,6 @@ class BarcodeApp(QMainWindow):
         self.activateWindow()
         self.input_line.setFocus()
         self.input_line.returnPressed.connect(self.on_process_clicked)
-        
-        self.file_label = QLabel(f"불러온 파일: {os.path.basename(self.current_file)}")
-        self.layout.addWidget(self.file_label)
 
 
     def create_menu_bar(self):
@@ -109,14 +106,15 @@ class BarcodeApp(QMainWindow):
                 self.result_label.setText(f"파일 저장 중 오류 발생: {str(e)}")
 
     def load_file(self):
+        """다른 파일 불러오기"""
         file_path, _ = QFileDialog.getOpenFileName(self, "파일 열기", "", "Excel Files (*.xlsm *.xlsx)")
         if file_path:
             self.current_file = file_path
-            self.file_label.setText(f"불러온 파일: {os.path.basename(self.current_file)}")  # 파일명 업데이트
             self.watcher.removePaths(self.watcher.files())  # 기존 감시자 제거
             self.watcher.addPath(file_path)  # 새 파일 감시자 등록
             self.update_recent_items()
             self.result_label.setText(f"파일이 변경되었습니다: {file_path}")
+
 
     def update_recent_items(self):
         """최근 항목 업데이트"""
