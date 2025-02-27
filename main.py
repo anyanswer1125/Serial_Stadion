@@ -118,10 +118,26 @@ class BarcodeApp(QMainWindow):
             self.update_recent_items()
             self.result_label.setText(f"파일이 변경되었습니다: {file_path}")
 
+    # def update_recent_items(self):
+        """최근 항목 업데이트 후 스크롤 위치 유지"""
+    #     scrollbar = self.recent_items_text.verticalScrollBar()
+    #     scroll_position = scrollbar.value()  # 현재 스크롤 위치 저장
+
+    #     recent_items = get_recent_items(self.current_file)
+    #     self.recent_items_text.setText(recent_items)
+
+    #     scrollbar.setValue(scroll_position)  # 이전 스크롤 위치로 복원
+    
+    
     def update_recent_items(self):
-        """최근 항목 업데이트"""
+        """최근 항목 업데이트 후 스크롤을 맨 아래로 이동"""
         recent_items = get_recent_items(self.current_file)
         self.recent_items_text.setText(recent_items)
+
+        scrollbar = self.recent_items_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())  # 스크롤을 맨 아래로 이동
+
+    
     def prompt_max_duplicate(self):
     # 최대 중복 횟수를 입력받는 팝업
         max_duplicate, ok = QInputDialog.getInt(
@@ -182,67 +198,53 @@ def process_barcode(barcode, file_path, app_window):
     wb = load_workbook(file_path, keep_vba=True)
     ws = wb.active
 
-    # 바코드가 이미 있는지 확인
-    existing_barcodes = [ws.cell(row=row, column=1).value for row in range(2, ws.max_row + 1)]
-    barcode_exists = barcode in existing_barcodes
-
-    # 현재 시각 (날짜 컬럼에 들어갈 값)
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-    if not barcode_exists:
+    # 바코드별 중복 횟수 계산
+    barcode_counts = {}
+    for row in range(2, ws.max_row + 1):
+        code = ws.cell(row=row, column=1).value
+        if code:
+            barcode_counts[code] = barcode_counts.get(code, 0) + 1
+
+    count = barcode_counts.get(barcode, 0) + 1  # 현재 바코드 카운트 증가
+    max_duplicate = 10  # 기본 최대 중복 횟수 (변경 가능)
+    
+    if not barcode_counts.get(barcode):
+        # 신규 등록
         max_duplicate = app_window.prompt_max_duplicate()
         if max_duplicate is None:
             wb.close()
             return "등록이 취소되었습니다."
-
-        # 신규 바코드 첫 번째 등록
-        new_row = ws.max_row + 1
-        ws.cell(row=new_row, column=1, value=barcode)
-        ws.cell(row=new_row, column=2, value=now_str)  # 날짜
-        ws.cell(row=new_row, column=3, value="1 회")  # 횟수
-        ws.cell(row=new_row, column=4, value="신규 등록")  # 비고
-        ws.cell(row=new_row, column=5, value=f"{max_duplicate}회")  # 최대중복
-
-        # ✅ 입력창 초기화
-        app_window.input_line.clear()
-        app_window.input_line.setFocus()
+        
+        remark = "신규 등록"
     else:
-        # 이미 존재하는 경우 중복 횟수 업데이트
-        max_row = ws.max_row + 1
-        count = sum(1 for row in range(2, max_row) if ws.cell(row=row, column=1).value == barcode)
-        max_duplicate = next(
-            (ws.cell(row=row, column=5).value for row in range(2, max_row) if ws.cell(row=row, column=1).value == barcode),
-            "1회"
-        )
+        # 중복 확인
+        existing_rows = [row for row in range(2, ws.max_row + 1) if ws.cell(row=row, column=1).value == barcode]
+        max_duplicate = int(ws.cell(existing_rows[0], column=5).value.replace("회", ""))  # 최대 중복 횟수
 
-        # 최대 중복 횟수 초과 시 등록 차단
-        if count >= int(max_duplicate.replace("회", "")):
-            wb.close()
+        if count > max_duplicate:
+            # 🚨 팝업창 추가 (최대 한도 초과 시)
             show_max_duplicate_popup(app_window, barcode, max_duplicate)
-            app_window.input_line.clear()
-            app_window.input_line.setFocus()
+            wb.close()
             return f"등록 불가: 바코드 {barcode}의 최대 중복 횟수({max_duplicate})를 초과했습니다."
 
-        # 상태 업데이트
-        state = "최대 한도 도달" if count + 1 >= int(max_duplicate.replace("회", "")) else "중복 사용"
+        remark = "최대 한도 도달" if count == max_duplicate else "중복 사용"
 
-        # 데이터 추가
-        ws.cell(row=max_row, column=1, value=barcode)
-        ws.cell(row=max_row, column=2, value=now_str)  # 날짜
-        ws.cell(row=max_row, column=3, value=f"{count + 1} 회")  # 횟수
-        ws.cell(row=max_row, column=4, value=state)  # 비고
-        ws.cell(row=max_row, column=5, value=max_duplicate)  # 최대중복
+    # 엑셀에 기록
+    new_row = ws.max_row + 1
+    ws.cell(row=new_row, column=1, value=barcode)
+    ws.cell(row=new_row, column=2, value=now_str)  # 날짜
+    ws.cell(row=new_row, column=3, value=f"{count} 회")  # 횟수
+    ws.cell(row=new_row, column=4, value=remark)  # 비고
+    ws.cell(row=new_row, column=5, value=f"{max_duplicate}회")  # 최대중복
 
     wb.save(file_path)
     wb.close()
 
-    # ✅ 바코드 입력창 초기화 및 포커스
-    app_window.input_line.clear()
-    app_window.input_line.setFocus()
+    return f"바코드 {barcode} 처리 완료 (중복: {count}/{max_duplicate})"
 
-    return f"바코드 {barcode} 처리 완료 (중복: {count + 1}/{max_duplicate})"
-
-def get_recent_items(file_path, limit=10):
+def get_recent_items(file_path, limit=1000):
     """최근 항목 가져오기 (일정한 간격 유지)"""
     wb = load_workbook(file_path, keep_vba=True)
     ws = wb.active
@@ -268,6 +270,7 @@ def get_recent_items(file_path, limit=10):
         max_count = str(ws.cell(row=row, column=5).value).rjust(COL_WIDTH["max_count"])  # 오른쪽 정렬
 
         # recent_items.append(f"{barcode} {timestamp} {duplicate_count} {status} {max_count}") #백업
+        # recent_items.append(f"   {barcode} {timestamp} {duplicate_count}회 {status}") 
         recent_items.append(f"   {barcode} {timestamp} {duplicate_count} {status}") 
 
     wb.close()
