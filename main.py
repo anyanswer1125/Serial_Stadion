@@ -80,17 +80,10 @@ class BarcodeApp(QMainWindow):
         self.search_table = QTableWidget()
         self.search_table.setColumnCount(4)  # 3개 데이터 + 삭제 버튼
         self.search_table.setHorizontalHeaderLabels(["날짜", "횟수", "비고", "삭제"])
-        self.search_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # ✅ 창 크기에 맞게 확장
-        
-        # ✅ 삭제 버튼 열은 고정 너비(60px), 나머지 열은 화면 크기에 따라 자동 조정
-        self.search_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)  # 날짜 (자동 조정)
-        self.search_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)  # 횟수 (자동 조정)
-        self.search_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)  # 비고 (자동 조정)
-        self.search_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)  # 삭제 (고정 너비)
-        self.search_table.setColumnWidth(3, 60)  # 삭제 버튼 열의 너비를 60px로 고정
-        
-        self.search_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)  # ✅ 행 높이 자동 조정
-        
+        self.search_table.setColumnWidth(0, 150)  # 날짜
+        self.search_table.setColumnWidth(1, 60)  # 횟수
+        self.search_table.setColumnWidth(2, 80)  # 비고
+        self.search_table.setColumnWidth(3, 30)  # 삭제 버튼
         right_layout.addWidget(self.search_table)
 
         # 레이아웃 구성
