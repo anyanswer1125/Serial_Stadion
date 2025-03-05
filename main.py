@@ -3,372 +3,253 @@ import sys
 from datetime import datetime
 from openpyxl import load_workbook, Workbook
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QVBoxLayout, QLineEdit, QPushButton, QLabel, QTextEdit, QFileDialog, QWidget, QInputDialog
+    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
+    QTextEdit, QFileDialog, QWidget, QTableWidget, QTableWidgetItem, QMessageBox, QScrollBar
+    ,QComboBox
 )
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QTextEdit
-from PySide6.QtCore import QFileSystemWatcher
-from PySide6.QtCore import QEvent
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import Qt, QEvent
 
-DEFAULT_EXCEL_FILE = "data.xlsm"  # 기본 데이터베이스 파일 이름
-QSS_FILE = "style.qss"  # QSS 파일 경로
+DEFAULT_EXCEL_FILE = "data.xlsm"  # 기본 데이터 파일
 
 
 class BarcodeApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("할인쿠폰R0.2_preview")
-        
-        # 🔹 창 크기 설정 (너비 800px, 높이 600px)
-        self.resize(500, 600)
+        self.resize(900, 600)  # 가로 크기 확대
 
-        # 🔹 창 위치와 크기 설정 (x=100, y=100, width=800, height=600)
-        # self.setGeometry(100, 100, 800, 600)
-        
-        self.current_file = DEFAULT_EXCEL_FILE  # 현재 데이터베이스 파일
-        
-        
-        self.watcher = QFileSystemWatcher([self.current_file])
-        self.watcher.fileChanged.connect(self.on_file_changed)
+        self.current_file = DEFAULT_EXCEL_FILE
 
-        # 중앙 위젯 설정
+        # 중앙 위젯
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        self.layout = QVBoxLayout()
+        # 레이아웃 설정
+        main_layout = QHBoxLayout()  # 가로 레이아웃
+        left_layout = QVBoxLayout()  # 바코드 입력 및 최근 항목
+        right_layout = QVBoxLayout()  # 검색 결과
 
-        # 바코드 입력창
+               # 바코드 입력창 (검색 & 처리 통합)
         self.input_line = QLineEdit()
-        self.input_line.setPlaceholderText("바코드를 입력하세요")
-        self.layout.addWidget(self.input_line)
+        self.input_line.setPlaceholderText("바코드를 입력하세요 (처리 & 검색)")
+        self.input_line.returnPressed.connect(self.on_process_and_search)
+        left_layout.addWidget(self.input_line)
 
         # 처리 버튼
         self.button = QPushButton("처리")
-        self.button.clicked.connect(self.on_process_clicked)
-        self.layout.addWidget(self.button)
+        self.button.setFixedWidth(80)
 
-        # 결과 표시
-        self.result_label = QLabel("")
-        self.layout.addWidget(self.result_label)
+        # 최대 중복 선택 드롭다운
+        self.max_duplicate_selector = QComboBox()
+        self.max_duplicate_selector.addItems(["5", "10", "20"])  # 선택지 추가
+        self.max_duplicate_selector.setCurrentText("10")  # 기본값 10
+        self.max_duplicate_selector.setFixedWidth(60)  # 크기 조절
+
+        # 버튼 & 드롭다운 정렬을 위한 가로 레이아웃
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.button)
+        button_layout.addWidget(self.max_duplicate_selector)
+        button_layout.setAlignment(Qt.AlignLeft)  # ✅ 왼쪽 정렬로 정리
+
+        # 배치
+        left_layout.addLayout(button_layout)
 
         # 최근 항목 표시
         self.recent_label = QLabel("최근 항목")
-        self.layout.addWidget(self.recent_label)
+        left_layout.addWidget(self.recent_label)
 
         self.recent_items_text = QTextEdit()
         self.recent_items_text.setReadOnly(True)
-        self.layout.addWidget(self.recent_items_text)
+        left_layout.addWidget(self.recent_items_text)
 
-        central_widget.setLayout(self.layout)
+        # 불러온 파일 정보
+        self.file_label = QLabel(f"불러온 파일: {os.path.basename(self.current_file)}")
+        left_layout.addWidget(self.file_label)
 
-        # 메뉴바 추가
-        self.create_menu_bar()
+        # 검색 결과 테이블
+        self.search_table = QTableWidget()
+        self.search_table.setColumnCount(4)  # 3개 데이터 + 삭제 버튼
+        self.search_table.setHorizontalHeaderLabels(["날짜", "횟수", "비고", "삭제"])
+        self.search_table.setColumnWidth(0, 150)  # 날짜
+        self.search_table.setColumnWidth(1, 60)  # 횟수
+        self.search_table.setColumnWidth(2, 150)  # 비고
+        self.search_table.setColumnWidth(3, 60)  # 삭제 버튼
+        right_layout.addWidget(self.search_table)
+
+        # 레이아웃 구성
+        main_layout.addLayout(left_layout, 1)  # 왼쪽 1 비율
+        main_layout.addLayout(right_layout, 1)  # 오른쪽 2 비율
+
+        central_widget.setLayout(main_layout)
 
         self.update_recent_items()
-        self.activateWindow()
-        self.input_line.setFocus()
-        self.input_line.returnPressed.connect(self.on_process_clicked)
-        
-        # 검색
-        # 생성자 (__init__)에서 추가
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("검색할 바코드를 입력하세요...")
-        self.layout.addWidget(self.search_input)
-        
-        self.search_button = QPushButton("검색")
-        self.search_button.clicked.connect(self.perform_search)
-        self.layout.addWidget(self.search_button)
-        
-        
-        self.file_label = QLabel(f"불러온 파일: {os.path.basename(self.current_file)}")
-        self.layout.addWidget(self.file_label)
 
-
-
-    def create_menu_bar(self):
-        """메뉴바 생성"""
-        menu_bar = self.menuBar()
-
-        # 파일 메뉴
-        file_menu = menu_bar.addMenu("파일")
-
-        # "다른 이름으로 저장하기" 메뉴
-        save_action = file_menu.addAction("다른 이름으로 저장하기")
-        save_action.triggered.connect(self.save_as)
-
-        # "불러오기" 메뉴
-        load_action = file_menu.addAction("불러오기")
-        load_action.triggered.connect(self.load_file)
-
-    def update_file_name_label(self):
-        """현재 파일명을 메뉴바 옆에 업데이트"""
-        self.file_name_label.setText(f"현재 파일: {os.path.basename(self.current_file)}")
-
-    def on_process_clicked(self):
+    def on_process_and_search(self):
+        """바코드를 처리하고 동시에 검색"""
         barcode = self.input_line.text().strip()
         if not barcode:
-            self.result_label.setText("바코드를 입력해주세요.")
+            QMessageBox.warning(self, "경고", "바코드를 입력하세요.")
             return
 
-        msg = process_barcode(barcode, self.current_file, self)
-        self.result_label.setText(msg)
+        # 선택한 최대 중복 횟수 가져오기
+        max_duplicate = int(self.max_duplicate_selector.currentText())
+
+        # 바코드 처리 (등록)
+        msg = process_barcode(barcode, self.current_file, max_duplicate)
+
+        # UI 업데이트
         self.input_line.clear()
-        self.update_recent_items()
+        self.update_recent_items(scroll_to_bottom=True)  # ✅ 최근 항목 맨 아래로 자동 스크롤
+        self.perform_search(barcode)  # ✅ 검색 결과 자동 표시
 
 
-    def save_as(self):
-        """다른 이름으로 파일 저장"""
-        file_path, _ = QFileDialog.getSaveFileName(self, "파일 저장", "", "Excel Files (*.xlsm *.xlsx)")
-        if file_path:
-            try:
-                wb = load_workbook(self.current_file, keep_vba=True)
-                wb.save(file_path)
-                wb.close()
-                self.result_label.setText(f"파일이 저장되었습니다: {file_path}")
-            except Exception as e:
-                self.result_label.setText(f"파일 저장 중 오류 발생: {str(e)}")
-
-    def load_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "파일 열기", "", "Excel Files (*.xlsm *.xlsx)")
-        if file_path:
-            self.current_file = file_path
-            self.file_label.setText(f"불러온 파일: {os.path.basename(self.current_file)}")  # 파일명 업데이트
-            self.watcher.removePaths(self.watcher.files())  # 기존 감시자 제거
-            self.watcher.addPath(file_path)  # 새 파일 감시자 등록
-            self.update_recent_items()
-            self.result_label.setText(f"파일이 변경되었습니다: {file_path}")
-
-    # def update_recent_items(self):
-        """최근 항목 업데이트 후 스크롤 위치 유지"""
-    #     scrollbar = self.recent_items_text.verticalScrollBar()
-    #     scroll_position = scrollbar.value()  # 현재 스크롤 위치 저장
-
-    #     recent_items = get_recent_items(self.current_file)
-    #     self.recent_items_text.setText(recent_items)
-
-    #     scrollbar.setValue(scroll_position)  # 이전 스크롤 위치로 복원
-    
-    
-    def update_recent_items(self):
-        """최근 항목 업데이트 후 스크롤을 맨 아래로 이동"""
+    def update_recent_items(self, scroll_to_bottom=False):
+        """최근 항목을 업데이트 & 스크롤 조정"""
         recent_items = get_recent_items(self.current_file)
         self.recent_items_text.setText(recent_items)
 
-        scrollbar = self.recent_items_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())  # 스크롤을 맨 아래로 이동
+        if scroll_to_bottom:
+            scrollbar = self.recent_items_text.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())  # ✅ 스크롤을 최근 입력한 항목으로 이동
 
-    
-    def prompt_max_duplicate(self):
-    # 최대 중복 횟수를 입력받는 팝업
-        max_duplicate, ok = QInputDialog.getInt(
-            self,                           # 부모 위젯 (여기서는 BarcodeApp 클래스의 인스턴스)
-            "최대 중복 횟수 설정",           # 팝업창의 제목 (타이틀)
-            "최대 중복 횟수를 입력해주세요:", # 사용자에게 보여줄 메시지 (라벨 텍스트)
-            10,                              # 기본값 (기본으로 입력창에 표시되는 값, 여기서는 10)
-            1,                              # 최소값 (사용자가 입력할 수 있는 가장 작은 값, 여기서는 1)
-            1000,                           # 최대값 (사용자가 입력할 수 있는 가장 큰 값, 여기서는 1000)
-            1                               # 스텝 값 (입력 시 숫자가 얼마나 증가/감소하는지, 여기서는 1씩)
-        )                                                                                           
-        return max_duplicate if ok else None
-    def on_file_changed(self):
-        # 엑셀 파일이 변경되었을 때 자동으로 최근 항목 업데이트
-        self.update_recent_items()
+    def perform_search(self, barcode):
+        """입력된 바코드를 검색하여 테이블에 표시"""
+        result = find_barcode_in_excel(self.current_file, barcode)
+
+        if result:
+            self.update_search_results(result, barcode)
+        else:
+            QMessageBox.information(self, "검색 결과", "해당 바코드가 없습니다.")
+
+    def update_search_results(self, results, barcode):
+        """검색 결과 테이블을 업데이트하고 '최대 중복' 컬럼 추가"""
+        self.search_table.setColumnCount(4)  # ✅ 컬럼 5개로 변경
+        self.search_table.setHorizontalHeaderLabels(["날짜", "횟수", "비고", "삭제"])
+
+        self.search_table.setRowCount(len(results))
+
+        for row, (date, count, remark, max_dup) in enumerate(results):
+            self.search_table.setItem(row, 0, QTableWidgetItem(date))
+            self.search_table.setItem(row, 1, QTableWidgetItem(count))
+            self.search_table.setItem(row, 2, QTableWidgetItem(remark))
+            # self.search_table.setItem(row, 3, QTableWidgetItem(max_dup))  # ✅ 최대 중복 컬럼 추가
+
+            # 삭제 버튼 추가
+            delete_button = QPushButton("X")
+            delete_button.clicked.connect(lambda _, r=row: self.delete_barcode_entry(barcode, r))
+            self.search_table.setCellWidget(row, 3, delete_button)  # ✅ 5번째 컬럼 (삭제 버튼)
+
+    def delete_barcode_entry(self, barcode, row):
+        """선택한 바코드 행을 삭제"""
+        date = self.search_table.item(row, 0).text()
+        count = self.search_table.item(row, 1).text()
+
+        if delete_barcode_from_excel(self.current_file, barcode, date, count):
+            QMessageBox.information(self, "삭제 완료", "바코드 항목이 삭제되었습니다.")
+            self.perform_search(barcode)  # ✅ 검색 결과 갱신
+            self.update_recent_items(scroll_to_bottom=True)  # ✅ 삭제 후 최근 항목도 갱신
+        else:
+            QMessageBox.warning(self, "삭제 실패", "삭제할 수 없습니다.")
+
     def changeEvent(self, event):
-        """창 활성화 시 바코드 입력창에 포커스를 강제로 설정"""
+        """창 활성화 시 바코드 입력창에 포커스 강제 설정"""
         if event.type() == QEvent.ActivationChange and self.isActiveWindow():
             self.input_line.setFocus()
         super().changeEvent(event)
-        
-
-    def perform_search(self):
-        """입력된 바코드를 검색 후 팝업 창에서 표시"""
-        barcode = self.search_input.text().strip()
-        if not barcode:
-            self.result_label.setText("⚠ 바코드를 입력하세요.")
-            return
-
-        result = self.find_barcode_in_excel(barcode)
-
-        if result:
-            self.show_search_results(barcode, result)
-        else:
-            self.result_label.setText("🔍 검색 결과 없음.")
-
-    def find_barcode_in_excel(self, barcode):
-        """엑셀에서 바코드 검색"""
-        from openpyxl import load_workbook
-
-        wb = load_workbook(self.current_file, keep_vba=True)
-        ws = wb.active
-
-        results = []
-        for row in range(2, ws.max_row + 1):
-            code = str(ws.cell(row=row, column=1).value).strip()
-            if code == barcode:
-                date = ws.cell(row=row, column=2).value
-                count = ws.cell(row=row, column=3).value
-                remark = ws.cell(row=row, column=4).value
-                results.append(f"{date}\t{count}\t{remark}")
-
-        wb.close()
-        return results if results else None
-    def show_search_results(self, barcode, results):
-        """검색 결과를 새 창으로 표시"""
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"바코드 검색 결과 - {barcode}")
-        dialog.setGeometry(300, 200, 380, 400)
-
-        layout = QVBoxLayout()
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setText("\n".join(results))
-
-        layout.addWidget(text_edit)
-        dialog.setLayout(layout)
-        dialog.exec()
 
 
-    
-def ensure_excel_file(file_path):
-    """데이터 관리를 위한 엑셀 파일 생성 확인"""
-    try:
-        wb = load_workbook(file_path, keep_vba=True)
-        ws = wb.active
-
-        # 기존에 F1까지 사용하던 헤더를 새로운 형식으로 변경
-        if ws.max_column < 6:
-            ws["A1"] = "바코드"
-            ws["B1"] = "날짜"
-            ws["C1"] = "횟수"
-            ws["D1"] = "비고"
-            ws["E1"] = "최대중복"
-            wb.save(file_path)
-        wb.close()
-    except FileNotFoundError:
-        wb = Workbook()
-        ws = wb.active
-        ws["A1"] = "바코드"
-        ws["B1"] = "날짜"
-        ws["C1"] = "횟수"
-        ws["D1"] = "비고"
-        ws["E1"] = "최대중복"
-        wb.save(file_path)
-
-def show_max_duplicate_popup(app_window, barcode, max_duplicate):
-    """최대 중복 횟수 초과 시 경고 팝업"""
-    msg_box = QMessageBox(app_window)
-    msg_box.setIcon(QMessageBox.Warning)
-    msg_box.setWindowTitle("최대 중복 횟수 초과")
-    msg_box.setText(f"바코드 {barcode}의 최대 중복 횟수 ({max_duplicate})를 초과했습니다.\n더 이상 등록할 수 없습니다.")
-    msg_box.setStandardButtons(QMessageBox.Ok)
-    msg_box.exec()
-
-def process_barcode(barcode, file_path, app_window):
-    """바코드를 엑셀 데이터베이스에 추가하고 처리"""
+def process_barcode(barcode, file_path, max_duplicate):
+    """바코드를 엑셀에 추가하면서 최대 중복 횟수를 확인"""
     wb = load_workbook(file_path, keep_vba=True)
     ws = wb.active
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-    # 바코드별 중복 횟수 계산
-    barcode_counts = {}
-    for row in range(2, ws.max_row + 1):
-        code = ws.cell(row=row, column=1).value
-        if code:
-            barcode_counts[code] = barcode_counts.get(code, 0) + 1
+    # 바코드 중복 횟수 계산
+    existing_rows = [row for row in range(2, ws.max_row + 1) if str(ws.cell(row, 1).value) == barcode]
+    count = len(existing_rows) + 1  # 현재 바코드 사용 횟수
 
-    count = barcode_counts.get(barcode, 0) + 1  # 현재 바코드 카운트 증가
-    max_duplicate = 10  # 기본 최대 중복 횟수 (변경 가능)
-    
-    if not barcode_counts.get(barcode):
-        # 신규 등록
-        max_duplicate = app_window.prompt_max_duplicate()
-        if max_duplicate is None:
-            wb.close()
-            return "등록이 취소되었습니다."
-        
-        remark = "신규 등록"
+    # 기존에 최대 중복 횟수가 등록되어 있으면 가져오고, 없으면 UI에서 선택한 값으로 설정
+    if existing_rows:
+        max_duplicate_cell = ws.cell(existing_rows[0], 5)  # 5번째 컬럼 (최대 중복)
+        if max_duplicate_cell.value:
+            max_duplicate = int(str(max_duplicate_cell.value).replace("회", "").strip())
+
+    if count == max_duplicate:
+        QMessageBox.information(None, "사용 완료", f"바코드 {barcode}의 최대 중복 횟수({max_duplicate})에 도달했습니다.")
+
+    # 중복 횟수가 최대 중복 횟수를 초과하면 등록 안 됨
+    if count > max_duplicate:
+        QMessageBox.warning(None, "등록 불가", f"바코드 {barcode}의 최대 중복 횟수({max_duplicate})를 초과했습니다.")
+        wb.close()
+        return f"등록 불가: 최대 중복 횟수({max_duplicate}) 초과"
+
+    # 신규 등록이면 최대 중복 값도 함께 저장
+    remark = "신규 등록" if count == 1 else "중복 사용"
+    if count == 1:
+        ws.append([barcode, now_str, f"{count} 회", remark, f"{max_duplicate}회"])
     else:
-        # 중복 확인
-        existing_rows = [row for row in range(2, ws.max_row + 1) if ws.cell(row=row, column=1).value == barcode]
-        max_duplicate = int(ws.cell(existing_rows[0], column=5).value.replace("회", ""))  # 최대 중복 횟수
-
-        if count > max_duplicate:
-            # 🚨 팝업창 추가 (최대 한도 초과 시)
-            show_max_duplicate_popup(app_window, barcode, max_duplicate)
-            wb.close()
-            return f"등록 불가: 바코드 {barcode}의 최대 중복 횟수({max_duplicate})를 초과했습니다."
-
-        remark = "최대 한도 도달" if count == max_duplicate else "중복 사용"
-
-    # 엑셀에 기록
-    new_row = ws.max_row + 1
-    ws.cell(row=new_row, column=1, value=barcode)
-    ws.cell(row=new_row, column=2, value=now_str)  # 날짜
-    ws.cell(row=new_row, column=3, value=f"{count} 회")  # 횟수
-    ws.cell(row=new_row, column=4, value=remark)  # 비고
-    ws.cell(row=new_row, column=5, value=f"{max_duplicate}회")  # 최대중복
+        ws.append([barcode, now_str, f"{count} 회", remark, ws.cell(existing_rows[0], 5).value])  # 기존 최대값 유지
 
     wb.save(file_path)
     wb.close()
 
-    return f"바코드 {barcode} 처리 완료 (중복: {count}/{max_duplicate})"
+    return f"바코드 {barcode} 처리 완료 ({count}/{max_duplicate})"
 
-def get_recent_items(file_path, limit=1000):
-    """최근 항목 가져오기 (일정한 간격 유지)"""
+
+def find_barcode_in_excel(file_path, barcode):
+    """엑셀에서 바코드 검색하여 최대 중복 횟수까지 가져오기"""
+    wb = load_workbook(file_path, keep_vba=True)
+    ws = wb.active
+
+    results = [
+        (ws.cell(row, 2).value, ws.cell(row, 3).value, ws.cell(row, 4).value, ws.cell(row, 5).value)  # 최대 중복 포함
+        for row in range(2, ws.max_row + 1)
+        if str(ws.cell(row, 1).value) == barcode
+    ]
+
+    wb.close()
+    return results if results else None
+
+
+def delete_barcode_from_excel(file_path, barcode, date, count):
+    """엑셀에서 특정 바코드 행 삭제"""
+    wb = load_workbook(file_path, keep_vba=True)
+    ws = wb.active
+
+    rows_to_keep = []
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+        if not (str(row[0].value) == barcode and str(row[1].value) == date and str(row[2].value) == count):
+            rows_to_keep.append([cell.value for cell in row])
+
+    ws.delete_rows(2, ws.max_row)
+    
+    for row_data in rows_to_keep:
+        ws.append(row_data)
+
+    wb.save(file_path)
+    wb.close()
+
+    return True
+
+
+def get_recent_items(file_path, limit=100):
+    """최근 100개 항목 가져오기"""
     wb = load_workbook(file_path, keep_vba=True)
     ws = wb.active
 
     max_row = ws.max_row
-    recent_items = []
-
-    # 칼럼 
-    # 너비 설정 (문자열 길이를 균일하게 유지)
-    COL_WIDTH = {
-        "barcode": 22,   # 바코드 길이 고정
-        "timestamp": 18, # YYYY-MM-DD HH:MM
-        "count": 12,      # "99 회"
-        "status": 20,    # "최대 사용 횟수 도달"
-        "max_count": 6   # "99회"
-    }
-
-    for row in range(max(max_row - limit + 1, 2), max_row + 1):  # 마지막 `limit`개만 가져옴
-        barcode = str(ws.cell(row=row, column=1).value).ljust(COL_WIDTH["barcode"])  # 왼쪽 정렬
-        timestamp = str(ws.cell(row=row, column=2).value).rjust(COL_WIDTH["timestamp"])
-        duplicate_count = str(ws.cell(row=row, column=3).value).rjust(COL_WIDTH["count"])  # 오른쪽 정렬
-        status = str(ws.cell(row=row, column=4).value).rjust(COL_WIDTH["status"])  # 왼쪽 정렬
-        max_count = str(ws.cell(row=row, column=5).value).rjust(COL_WIDTH["max_count"])  # 오른쪽 정렬
-
-        # recent_items.append(f"{barcode} {timestamp} {duplicate_count} {status} {max_count}") #백업
-        # recent_items.append(f"   {barcode} {timestamp} {duplicate_count}회 {status}") 
-        recent_items.append(f"   {barcode} {timestamp} {duplicate_count} {status}") 
+    recent_items = "\n".join(
+        f"{ws.cell(row, 1).value} {ws.cell(row, 2).value} {ws.cell(row, 3).value} {ws.cell(row, 4).value}"
+        for row in range(max(max_row - limit, 1), max_row + 1)
+    )
 
     wb.close()
-    return "\n".join(recent_items)
-
-
-def load_qss(app, qss_file):
-    """QSS 파일을 로드하여 스타일 적용"""
-    try:
-        with open(qss_file, "r", encoding="utf-8") as f:
-            app.setStyleSheet(f.read())
-    except FileNotFoundError:
-        print(f"QSS 파일을 찾을 수 없습니다: {qss_file}")
+    return recent_items
 
 
 if __name__ == "__main__":
-    ensure_excel_file(DEFAULT_EXCEL_FILE)
     app = QApplication(sys.argv)
-
-    # QSS 로드 및 핫 리로드 설정
-    load_qss(app, QSS_FILE)
-    watcher = QFileSystemWatcher([QSS_FILE])
-    watcher.fileChanged.connect(lambda: load_qss(app, QSS_FILE))  # QSS 변경 시 자동 적용
-
     window = BarcodeApp()
     window.show()
     sys.exit(app.exec())
-
-
