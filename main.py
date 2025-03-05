@@ -168,17 +168,36 @@ class BarcodeApp(QMainWindow):
             self.search_table.setCellWidget(row, 3, delete_button)  # ✅ 5번째 컬럼 (삭제 버튼)
 
     def delete_barcode_entry(self, barcode, row):
-        """선택한 바코드 행을 삭제"""
+        """선택한 바코드 행을 삭제하기 전에 두 번의 확인 메시지를 표시"""
         date = self.search_table.item(row, 0).text()
         count = self.search_table.item(row, 1).text()
-
+    
+        # 첫 번째 확인 메시지
+        first_confirm = QMessageBox.question(
+            self, "삭제 확인", "삭제한 후에는 되돌릴 수 없습니다. 이를 확인했습니까?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+    
+        if first_confirm != QMessageBox.Yes:
+            return  # 사용자가 '아니요'를 선택하면 삭제 취소
+    
+        # 두 번째 확인 메시지
+        second_confirm = QMessageBox.question(
+            self, "최종 삭제 확인", "정말 삭제하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+    
+        if second_confirm != QMessageBox.Yes:
+            return  # 사용자가 '아니요'를 선택하면 삭제 취소
+    
+        # 최종 삭제 진행
         if delete_barcode_from_excel(self.current_file, barcode, date, count):
             QMessageBox.information(self, "삭제 완료", "바코드 항목이 삭제되었습니다.")
             self.perform_search(barcode)  # ✅ 검색 결과 갱신
             self.update_recent_items(scroll_to_bottom=True)  # ✅ 삭제 후 최근 항목도 갱신
         else:
             QMessageBox.warning(self, "삭제 실패", "삭제할 수 없습니다.")
-
+    
     def changeEvent(self, event):
         """창 활성화 시 바코드 입력창에 포커스 강제 설정"""
         if event.type() == QEvent.ActivationChange and self.isActiveWindow():
