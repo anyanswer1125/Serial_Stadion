@@ -5,7 +5,7 @@ from openpyxl import load_workbook, Workbook
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
     QTextEdit, QFileDialog, QWidget, QTableWidget, QTableWidgetItem, QMessageBox, QScrollBar
-    ,QComboBox,QSizePolicy
+    ,QComboBox,QSizePolicy, QHeaderView
 )
 from PySide6.QtCore import Qt, QEvent
 
@@ -34,8 +34,7 @@ class BarcodeApp(QMainWindow):
         self.input_line.setPlaceholderText("바코드를 입력하세요 (처리 & 검색)")
         self.input_line.returnPressed.connect(self.on_process_and_search)
         self.input_line.setFixedHeight(100)
-        self.input_line.setStyleSheet("font-size: 20px; border: 2px solid rgb(0, 153, 255);border-radius: 5px;")
-        # self.input_line.setStyleSheet("")
+        self.input_line.setStyleSheet("font-size: 20px;")
         
         left_layout.addWidget(self.input_line)
         
@@ -81,10 +80,17 @@ class BarcodeApp(QMainWindow):
         self.search_table = QTableWidget()
         self.search_table.setColumnCount(4)  # 3개 데이터 + 삭제 버튼
         self.search_table.setHorizontalHeaderLabels(["날짜", "횟수", "비고", "삭제"])
-        self.search_table.setColumnWidth(0, 150)  # 날짜
-        self.search_table.setColumnWidth(1, 60)  # 횟수
-        self.search_table.setColumnWidth(2, 150)  # 비고
-        self.search_table.setColumnWidth(3, 60)  # 삭제 버튼
+        self.search_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # ✅ 창 크기에 맞게 확장
+        
+        # ✅ 삭제 버튼 열은 고정 너비(60px), 나머지 열은 화면 크기에 따라 자동 조정
+        self.search_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)  # 날짜 (자동 조정)
+        self.search_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)  # 횟수 (자동 조정)
+        self.search_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)  # 비고 (자동 조정)
+        self.search_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)  # 삭제 (고정 너비)
+        self.search_table.setColumnWidth(3, 60)  # 삭제 버튼 열의 너비를 60px로 고정
+        
+        self.search_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)  # ✅ 행 높이 자동 조정
+        
         right_layout.addWidget(self.search_table)
 
         # 레이아웃 구성
@@ -147,7 +153,7 @@ class BarcodeApp(QMainWindow):
 
             # 삭제 버튼 추가
             delete_button = QPushButton("X")
-            delete_button.setStyleSheet("color:red")
+            delete_button.setStyleSheet("border: 0px ; border-radius: 5px;font-size: 20px; font-weight: 1000;color: white; background-color: rgb(255, 60, 60);")
             delete_button.clicked.connect(lambda _, r=row: self.delete_barcode_entry(barcode, r))
             self.search_table.setCellWidget(row, 3, delete_button)  # ✅ 5번째 컬럼 (삭제 버튼)
 
@@ -187,6 +193,7 @@ def process_barcode(barcode, file_path, max_duplicate):
         if max_duplicate_cell.value:
             max_duplicate = int(str(max_duplicate_cell.value).replace("회", "").strip())
 
+    # 중복 횟수가 최대 중복 횟수에 도달하면 팝업 표시
     if count == max_duplicate:
         QMessageBox.information(None, "사용 완료", f"바코드 {barcode}의 최대 중복 횟수({max_duplicate})에 도달했습니다.")
 
@@ -197,12 +204,20 @@ def process_barcode(barcode, file_path, max_duplicate):
         return f"등록 불가: 최대 중복 횟수({max_duplicate}) 초과"
 
     # 신규 등록이면 최대 중복 값도 함께 저장
-    remark = "신규 등록" if count == 1 else "중복 사용"
     if count == 1:
-        ws.append([barcode, now_str, f"{count} 회", remark, f"{max_duplicate}회"])
+        remark = "신규 등록"
+        max_dup_value = f"{max_duplicate}회"
+    elif count == max_duplicate:
+        remark = f"{max_duplicate}회 완료"  # ✅ 최대 횟수 도달 시 "완료" 처리
+        max_dup_value = ws.cell(existing_rows[0], 5).value
     else:
-        ws.append([barcode, now_str, f"{count} 회", remark, ws.cell(existing_rows[0], 5).value])  # 기존 최대값 유지
+        remark = "중복 사용"
+        max_dup_value = ws.cell(existing_rows[0], 5).value
 
+    # ✅ 데이터 추가
+    ws.append([barcode, now_str, f"{count} 회", remark, max_dup_value])
+
+    # ✅ 저장 순서 수정
     wb.save(file_path)
     wb.close()
 
