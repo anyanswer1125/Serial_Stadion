@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     ,QComboBox,QSizePolicy, QHeaderView
 )
 from PySide6.QtCore import Qt, QEvent
+from PySide6.QtGui import QIcon
 
 DEFAULT_EXCEL_FILE = "data.xlsm"  # 기본 데이터 파일
 
@@ -18,6 +19,7 @@ class BarcodeApp(QMainWindow):
         self.setWindowTitle("할인쿠폰R0.2_preview")
         self.resize(900, 600)  # 가로 크기 확대
         
+        self.setWindowIcon(QIcon("./barcode_icon.png"))
 
         self.current_file = DEFAULT_EXCEL_FILE
 
