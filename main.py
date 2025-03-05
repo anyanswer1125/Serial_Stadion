@@ -17,8 +17,16 @@ class BarcodeApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("할인쿠폰R0.2_preview")
         self.resize(900, 600)  # 가로 크기 확대
+        
 
         self.current_file = DEFAULT_EXCEL_FILE
+
+        # ✅ 파일 존재 여부 확인 (파일이 없으면 경고창 출력 후 종료)
+        if not os.path.exists(self.current_file):
+            QMessageBox.critical(self, "파일 없음", f"데이터 파일 '{self.current_file}'이(가) 없습니다.\n파일을 확인하세요.")
+            sys.exit(1)  # 프로그램 종료
+
+
 
         # 중앙 위젯
         central_widget = QWidget()
@@ -29,9 +37,9 @@ class BarcodeApp(QMainWindow):
         left_layout = QVBoxLayout()  # 바코드 입력 및 최근 항목
         right_layout = QVBoxLayout()  # 검색 결과
 
-               # 바코드 입력창 (검색 & 처리 통합)
+        # 바코드 입력창 (검색 & 처리 통합)
         self.input_line = QLineEdit()
-        self.input_line.setPlaceholderText("바코드를 입력하세요 (처리 & 검색)")
+        self.input_line.setPlaceholderText("바코드를 입력 후 엔터 (처리 & 검색)")
         self.input_line.returnPressed.connect(self.on_process_and_search)
         self.input_line.setFixedHeight(100)
         self.input_line.setStyleSheet("font-size: 20px;")
@@ -39,11 +47,13 @@ class BarcodeApp(QMainWindow):
         left_layout.addWidget(self.input_line)
         
 
-        # 처리 버튼
-        self.button = QPushButton("처리")
+        # "검색(만)" 버튼 클릭 시 검색 기능만 수행하도록 설정
+        self.button = QPushButton("검색(만)")
         self.button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 가로 크기 자동 확장
         self.button.setFixedHeight(50)
         self.button.setStyleSheet("font-size:20px")
+        self.button.clicked.connect(self.on_search_only)
+
 
         # 최대 중복 선택 드롭다운
         self.max_duplicate_selector = QComboBox()
@@ -63,18 +73,20 @@ class BarcodeApp(QMainWindow):
         # 배치
         left_layout.addLayout(button_layout)
 
+        # 최근 항목 테이블로 변경
+        self.recent_table = QTableWidget()
+        self.recent_table.setColumnCount(4)  # 4개 컬럼 (바코드, 날짜, 횟수, 비고)
+        self.recent_table.setHorizontalHeaderLabels(["바코드", "날짜", "시간", "횟수"])
 
-        # 최근 항목 표시
-        self.recent_label = QLabel("최근 항목")
-        left_layout.addWidget(self.recent_label)
+        # 가변 크기 설정
+        # self.recent_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)  # 테이블 크기 자동 조정
+        self.recent_table.setColumnWidth(0,150)
+        self.recent_table.setColumnWidth(2,50)
+        self.recent_table.setEditTriggers(QTableWidget.NoEditTriggers)  # 편집 불가
+        # self.recent_table.setSelectionBehavior(QTableWidget.SelectRows)  # 행 전체 선택
+        # self.recent_table.setSelectionMode(QTableWidget.SingleSelection)  # 단일 선택
+        left_layout.addWidget(self.recent_table)  # 왼쪽 레이아웃에 추가
 
-        self.recent_items_text = QTextEdit()
-        self.recent_items_text.setReadOnly(True)
-        left_layout.addWidget(self.recent_items_text)
-
-        # 불러온 파일 정보
-        self.file_label = QLabel(f"불러온 파일: {os.path.basename(self.current_file)}")
-        left_layout.addWidget(self.file_label)
 
         # 검색 결과 테이블
         self.search_table = QTableWidget()
@@ -114,13 +126,18 @@ class BarcodeApp(QMainWindow):
 
 
     def update_recent_items(self, scroll_to_bottom=False):
-        """최근 항목을 업데이트 & 스크롤 조정"""
-        recent_items = get_recent_items(self.current_file)
-        self.recent_items_text.setText(recent_items)
+        """최근 항목을 테이블(QTableWidget) 형식으로 업데이트"""
+        recent_items = get_recent_items(self.current_file, limit=100)  # 최근 100개 가져오기
+        recent_items = [line.split() for line in recent_items.split("\n") if line]  # 데이터 가공
+
+        self.recent_table.setRowCount(len(recent_items))  # 행 개수 설정
+
+        for row, item in enumerate(recent_items):
+            for col, data in enumerate(item):
+                self.recent_table.setItem(row, col, QTableWidgetItem(data))  # 테이블에 데이터 삽입
 
         if scroll_to_bottom:
-            scrollbar = self.recent_items_text.verticalScrollBar()
-            scrollbar.setValue(scrollbar.maximum())  # ✅ 스크롤을 최근 입력한 항목으로 이동
+            self.recent_table.scrollToBottom()  # ✅ 최신 항목이 가장 아래로 가도록 스크롤 이동
 
     def perform_search(self, barcode):
         """입력된 바코드를 검색하여 테이블에 표시"""
@@ -167,6 +184,15 @@ class BarcodeApp(QMainWindow):
         if event.type() == QEvent.ActivationChange and self.isActiveWindow():
             self.input_line.setFocus()
         super().changeEvent(event)
+
+    def on_search_only(self):
+        """검색(만) 버튼 클릭 시 바코드를 검색"""
+        barcode = self.input_line.text().strip()
+        if not barcode:
+            QMessageBox.warning(self, "경고", "바코드를 입력하세요.")
+            return
+
+        self.perform_search(barcode)  # ✅ 검색 수행
 
 
 def process_barcode(barcode, file_path, max_duplicate):
