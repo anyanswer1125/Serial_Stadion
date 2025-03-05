@@ -5,7 +5,7 @@ from openpyxl import load_workbook, Workbook
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
     QTextEdit, QFileDialog, QWidget, QTableWidget, QTableWidgetItem, QMessageBox, QScrollBar
-    ,QComboBox
+    ,QComboBox,QSizePolicy
 )
 from PySide6.QtCore import Qt, QEvent
 
@@ -33,26 +33,37 @@ class BarcodeApp(QMainWindow):
         self.input_line = QLineEdit()
         self.input_line.setPlaceholderText("바코드를 입력하세요 (처리 & 검색)")
         self.input_line.returnPressed.connect(self.on_process_and_search)
+        self.input_line.setFixedHeight(100)
+        self.input_line.setStyleSheet("font-size: 20px; border: 2px solid rgb(0, 153, 255);border-radius: 5px;")
+        # self.input_line.setStyleSheet("")
+        
         left_layout.addWidget(self.input_line)
+        
 
         # 처리 버튼
         self.button = QPushButton("처리")
-        self.button.setFixedWidth(80)
+        self.button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 가로 크기 자동 확장
+        self.button.setFixedHeight(50)
+        self.button.setStyleSheet("font-size:20px")
 
         # 최대 중복 선택 드롭다운
         self.max_duplicate_selector = QComboBox()
         self.max_duplicate_selector.addItems(["5", "10", "20"])  # 선택지 추가
         self.max_duplicate_selector.setCurrentText("10")  # 기본값 10
-        self.max_duplicate_selector.setFixedWidth(60)  # 크기 조절
+        self.max_duplicate_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 가로 크기 자동 확장
+        self.max_duplicate_selector.setFixedHeight(50)
+        self.max_duplicate_selector.setStyleSheet("font-size: 20px")
 
         # 버튼 & 드롭다운 정렬을 위한 가로 레이아웃
         button_layout = QHBoxLayout()
-        button_layout.addWidget(self.button)
-        button_layout.addWidget(self.max_duplicate_selector)
-        button_layout.setAlignment(Qt.AlignLeft)  # ✅ 왼쪽 정렬로 정리
+        button_layout.addWidget(self.button, 8)  # 비율 8
+        button_layout.addWidget(self.max_duplicate_selector, 2)  # 비율 2
+        button_layout.setStretch(0, 8)  # 버튼 비율 8
+        button_layout.setStretch(1, 2)  # 드롭다운 비율 2
 
         # 배치
         left_layout.addLayout(button_layout)
+
 
         # 최근 항목 표시
         self.recent_label = QLabel("최근 항목")
@@ -136,6 +147,7 @@ class BarcodeApp(QMainWindow):
 
             # 삭제 버튼 추가
             delete_button = QPushButton("X")
+            delete_button.setStyleSheet("color:red")
             delete_button.clicked.connect(lambda _, r=row: self.delete_barcode_entry(barcode, r))
             self.search_table.setCellWidget(row, 3, delete_button)  # ✅ 5번째 컬럼 (삭제 버튼)
 
