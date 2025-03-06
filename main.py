@@ -19,7 +19,7 @@ class BarcodeApp(QMainWindow):
         self.setWindowTitle("할인쿠폰R0.2_preview")
         self.resize(900, 600)  # 가로 크기 확대
         
-        self.setWindowIcon(QIcon("./barcode_icon.png"))
+        self.setWindowIcon(QIcon("./barcode_icon.ico"))
 
         self.current_file = DEFAULT_EXCEL_FILE
 
