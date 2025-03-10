@@ -57,23 +57,27 @@ class BarcodeApp(QMainWindow):
         self.button.clicked.connect(self.on_search_only)
 
 
-        # 최대 중복 선택 드롭다운
-        self.max_duplicate_selector = QComboBox()
-        self.max_duplicate_selector.addItems(["5", "10", "20"])  # 선택지 추가
-        self.max_duplicate_selector.setCurrentText("10")  # 기본값 10
-        self.max_duplicate_selector.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 가로 크기 자동 확장
-        self.max_duplicate_selector.setFixedHeight(50)
-        self.max_duplicate_selector.setStyleSheet("font-size: 20px")
+        # 최대 중복 선택 입력란 (QComboBox → QLineEdit)
+        self.max_duplicate_input = QLineEdit()
+        self.max_duplicate_input.setPlaceholderText("최대 중복 횟수 입력")
+        self.max_duplicate_input.setText("10")  # 기본값 10 설정
+        self.max_duplicate_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 가로 크기 자동 확장
+        self.max_duplicate_input.setFixedHeight(50)
+        self.max_duplicate_input.setStyleSheet("font-size: 20px; text-align: center;")
 
-        # 버튼 & 드롭다운 정렬을 위한 가로 레이아웃
+        # 입력값이 숫자인지 검증하는 기능 추가
+        # self.max_duplicate_input.setValidator(QIntValidator(1, 100))  # 1~100 사이의 숫자만 입력 가능
+
+        # 버튼 & 입력창 정렬을 위한 가로 레이아웃
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.button, 8)  # 비율 8
-        button_layout.addWidget(self.max_duplicate_selector, 2)  # 비율 2
+        button_layout.addWidget(self.max_duplicate_input, 2)  # 비율 2
         button_layout.setStretch(0, 8)  # 버튼 비율 8
-        button_layout.setStretch(1, 2)  # 드롭다운 비율 2
+        button_layout.setStretch(1, 2)  # 입력창 비율 2
 
         # 배치
         left_layout.addLayout(button_layout)
+
 
         # 최근 항목 테이블로 변경
         self.recent_table = QTableWidget()
@@ -116,7 +120,12 @@ class BarcodeApp(QMainWindow):
             return
 
         # 선택한 최대 중복 횟수 가져오기
-        max_duplicate = int(self.max_duplicate_selector.currentText())
+        max_duplicate_text = self.max_duplicate_input.text().strip()
+        if not max_duplicate_text.isdigit():
+            QMessageBox.warning(self, "입력 오류", "최대 중복 횟수는 숫자로 입력해야 합니다.")
+            return
+        max_duplicate = int(max_duplicate_text)
+
 
         # 바코드 처리 (등록)
         msg = process_barcode(barcode, self.current_file, max_duplicate)
